@@ -6,6 +6,9 @@ import javax.swing.table.DefaultTableModel;
 import com.sers.dao.DBConnection;
 
 import java.awt.*;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.sql.*;
 
 public class AdminDashboard extends JFrame {
@@ -456,10 +459,112 @@ private void refreshEnrollmentTable(DefaultTableModel model) {
 }
 
 
-    private JPanel createReportsPanel() {
-        // Generate reports (e.g., export to CSV)
-        return new JPanel();
-    }
-    
+//... existing imports (add if needed: import javax.swing.table.DefaultTableModel; import java.io.FileWriter; for CSV export)
+
+private JPanel createReportsPanel() {
+ JPanel panel = new JPanel(new BorderLayout());
+ 
+ // Buttons for report types
+ JButton enrollmentSummaryBtn = new JButton("Enrollment Summary by Term");
+ JButton studentDemographicsBtn = new JButton("Student Demographics");
+ JButton exportBtn = new JButton("Export to CSV");
+ 
+ JPanel buttonPanel = new JPanel();
+ buttonPanel.add(enrollmentSummaryBtn);
+ buttonPanel.add(studentDemographicsBtn);
+ buttonPanel.add(exportBtn);
+ 
+ // Table to display report data
+ DefaultTableModel tableModel = new DefaultTableModel();
+ JTable reportTable = new JTable(tableModel);
+ JScrollPane tableScroll = new JScrollPane(reportTable);
+ 
+ panel.add(buttonPanel, BorderLayout.NORTH);
+ panel.add(tableScroll, BorderLayout.CENTER);
+ 
+ // Enrollment Summary Button Action
+ enrollmentSummaryBtn.addActionListener(e -> {
+     tableModel.setColumnIdentifiers(new String[]{"Term", "Total Enrollments", "Accepted", "Rejected", "Pending"});
+     tableModel.setRowCount(0);
+     try (Connection conn = DBConnection.getConnection();
+          Statement stmt = conn.createStatement();
+          ResultSet rs = stmt.executeQuery(
+              "SELECT term, COUNT(*) AS total, " +
+              "SUM(CASE WHEN status='accepted' THEN 1 ELSE 0 END) AS accepted, " +
+              "SUM(CASE WHEN status='rejected' THEN 1 ELSE 0 END) AS rejected, " +
+              "SUM(CASE WHEN status='pending' THEN 1 ELSE 0 END) AS pending " +
+              "FROM enrollments GROUP BY term")) {
+         while (rs.next()) {
+             tableModel.addRow(new Object[]{
+                 rs.getString("term"),
+                 rs.getInt("total"),
+                 rs.getInt("accepted"),
+                 rs.getInt("rejected"),
+                 rs.getInt("pending")
+             });
+         }
+     } catch (SQLException ex) {
+         ex.printStackTrace();
+     }
+ });
+ 
+ // Student Demographics Button Action
+ studentDemographicsBtn.addActionListener(e -> {
+     tableModel.setColumnIdentifiers(new String[]{"Year Level", "Regular", "Irregular", "Total"});
+     tableModel.setRowCount(0);
+     try (Connection conn = DBConnection.getConnection();
+          Statement stmt = conn.createStatement();
+          ResultSet rs = stmt.executeQuery(
+              "SELECT year_level, " +
+              "SUM(CASE WHEN classification='regular' THEN 1 ELSE 0 END) AS regular, " +
+              "SUM(CASE WHEN classification='irregular' THEN 1 ELSE 0 END) AS irregular, " +
+              "COUNT(*) AS total FROM students GROUP BY year_level")) {
+         while (rs.next()) {
+             tableModel.addRow(new Object[]{
+                 rs.getString("year_level"),
+                 rs.getInt("regular"),
+                 rs.getInt("irregular"),
+                 rs.getInt("total")
+             });
+         }
+     } catch (SQLException ex) {
+         ex.printStackTrace();
+     }
+ });
+ 
+ // Export to CSV Button Action
+ exportBtn.addActionListener(e -> {
+     if (tableModel.getRowCount() == 0) {
+         JOptionPane.showMessageDialog(panel, "No data to export. Generate a report first.");
+         return;
+     }
+     try {
+         JFileChooser fileChooser = new JFileChooser();
+         fileChooser.setSelectedFile(new File("report.csv"));
+         if (fileChooser.showSaveDialog(panel) == JFileChooser.APPROVE_OPTION) {
+             File file = fileChooser.getSelectedFile();
+             try (FileWriter writer = new FileWriter(file)) {
+                 // Write headers
+                 for (int i = 0; i < tableModel.getColumnCount(); i++) {
+                     writer.write(tableModel.getColumnName(i) + (i < tableModel.getColumnCount() - 1 ? "," : "\n"));
+                 }
+                 // Write data
+                 for (int i = 0; i < tableModel.getRowCount(); i++) {
+                     for (int j = 0; j < tableModel.getColumnCount(); j++) {
+                         writer.write(tableModel.getValueAt(i, j).toString() + (j < tableModel.getColumnCount() - 1 ? "," : "\n"));
+                     }
+                 }
+                 JOptionPane.showMessageDialog(panel, "Report exported to " + file.getAbsolutePath());
+             }
+         }
+     } catch (IOException ex) {
+         ex.printStackTrace();
+         JOptionPane.showMessageDialog(panel, "Error exporting report.");
+     }
+ });
+ 
+ return panel;
+}
+
     
 }
